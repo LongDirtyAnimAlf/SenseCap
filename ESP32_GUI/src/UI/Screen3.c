@@ -1,7 +1,7 @@
 #include <lvgl.h>
-#include "Screenbase.h"
 
 lv_obj_t * screen3 = NULL;
+static lv_obj_t * Screen3Info = NULL;
 
 extern const lv_font_t lv_font_montserrat_18;
 extern const lv_font_t lv_font_montserrat_22;
@@ -18,9 +18,50 @@ void Create_Screen3(lv_event_cb_t event_cb_more)
   lv_obj_t * ta = NULL;
 
   screen3 = lv_obj_create(NULL);
-  BaseScreenSetup(screen3, event_cb_more);
 
-  lv_obj_t * cont = GetContentObject(screen3);
+  lv_obj_t * nav = lv_obj_create(screen3);
+  //lv_obj_set_style_pad_all(nav, 0, LV_PART_MAIN);
+  lv_obj_set_style_pad_top(nav, 6, LV_PART_MAIN);
+  lv_obj_set_style_pad_bottom(nav, 6, LV_PART_MAIN);
+  lv_obj_set_style_pad_left(nav, 2, LV_PART_MAIN);
+  lv_obj_set_style_pad_right(nav, 2, LV_PART_MAIN);
+
+  lv_obj_set_size(nav, lv_pct(100), LV_SIZE_CONTENT);
+  lv_obj_align(nav, LV_ALIGN_BOTTOM_MID, 0, 0);
+
+  obj = lv_btn_create(nav);
+  lv_obj_align(obj, LV_ALIGN_RIGHT_MID, 0, 0);
+  lv_obj_set_size(obj, lv_pct(25), LV_SIZE_CONTENT);
+  lv_obj_add_event_cb(obj, event_cb_more, LV_EVENT_CLICKED, (void *)0);
+  lv_obj_set_style_bg_color(obj,lv_palette_darken(LV_PALETTE_INDIGO,4), LV_PART_MAIN);      
+
+  obj = lv_label_create(obj);
+  lv_obj_align(obj, LV_ALIGN_CENTER, 0, 0);
+  lv_label_set_text(obj, "Back");
+
+  obj = lv_btn_create(nav);
+  lv_obj_align(obj, LV_ALIGN_LEFT_MID, 0, 0);
+  lv_obj_set_size(obj, lv_pct(25), LV_SIZE_CONTENT);
+  lv_obj_add_event_cb(obj, event_cb_more, LV_EVENT_CLICKED, (void *)1);
+  lv_obj_set_style_bg_color(obj,lv_palette_darken(LV_PALETTE_INDIGO,4), LV_PART_MAIN);      
+
+  obj = lv_label_create(obj);
+  lv_obj_align(obj, LV_ALIGN_CENTER, 0, 0);
+  lv_label_set_text(obj, "More");
+
+  Screen3Info = lv_label_create(nav);
+  lv_obj_align(Screen3Info, LV_ALIGN_CENTER, 0, 0);
+  lv_obj_set_style_text_font(Screen3Info, &lv_font_montserrat_32, LV_PART_MAIN| LV_STATE_DEFAULT);  
+  lv_label_set_text(Screen3Info, "INFO");
+
+  lv_obj_update_layout(nav);
+  int nav_height = lv_obj_get_height(nav);
+
+  lv_obj_t * cont = lv_obj_create(screen3);
+  lv_obj_remove_style_all(cont);
+  lv_obj_set_size(cont, lv_pct(100), lv_pct(100));
+  lv_obj_align(cont, LV_ALIGN_TOP_MID, 0, 0);
+  lv_obj_set_style_margin_bottom(cont, nav_height, LV_PART_MAIN);
 
   static lv_style_t style;
   lv_style_init(&style);
