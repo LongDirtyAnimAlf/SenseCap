@@ -2,6 +2,7 @@
 #include <lvgl.h>
 #include "sevensegment.h"
 #include "shared.h"
+#include "Screenbase.h"
 
 #define DATASIZE 2000
 #define CHARTSIZE 255
@@ -28,7 +29,6 @@ static byte SelectedBattery = 0; // valid numbers from 1 to 16
 lv_obj_t * screen2 = NULL;
 static lv_obj_t * Screen2VoltageDisplay = NULL;
 static lv_obj_t * Screen2CurrentDisplay = NULL;
-static lv_obj_t * Screen2Info = NULL;
 static lv_obj_t * chart = NULL;
 static lv_chart_series_t * voltage_series = NULL;
 static lv_chart_series_t * current_series = NULL;
@@ -38,49 +38,9 @@ void Screen2Create(lv_event_cb_t event_cb_more)
   lv_obj_t * obj = NULL;
 
   screen2 = lv_obj_create(NULL);
+  BaseScreenSetup(screen2, event_cb_more);
 
-  lv_obj_t * nav = lv_obj_create(screen2);
-  lv_obj_set_style_pad_top(nav, 6, LV_PART_MAIN);
-  lv_obj_set_style_pad_bottom(nav, 6, LV_PART_MAIN);
-  lv_obj_set_style_pad_left(nav, 2, LV_PART_MAIN);
-  lv_obj_set_style_pad_right(nav, 2, LV_PART_MAIN);
-
-  lv_obj_set_size(nav, lv_pct(100), LV_SIZE_CONTENT);
-  lv_obj_align(nav, LV_ALIGN_BOTTOM_MID, 0, 0);
-
-  obj = lv_btn_create(nav);
-  lv_obj_align(obj, LV_ALIGN_RIGHT_MID, 0, 0);
-  lv_obj_set_size(obj, lv_pct(25), LV_SIZE_CONTENT);
-  lv_obj_add_event_cb(obj, event_cb_more, LV_EVENT_CLICKED, (void *)0);
-  lv_obj_set_style_bg_color(obj,lv_palette_darken(LV_PALETTE_INDIGO,4), LV_PART_MAIN);      
-
-  obj = lv_label_create(obj);
-  lv_obj_align(obj, LV_ALIGN_CENTER, 0, 0);
-  lv_label_set_text(obj, "Back");
-
-  obj = lv_btn_create(nav);
-  lv_obj_align(obj, LV_ALIGN_LEFT_MID, 0, 0);
-  lv_obj_set_size(obj, lv_pct(25), LV_SIZE_CONTENT);
-  lv_obj_add_event_cb(obj, event_cb_more, LV_EVENT_CLICKED, (void *)1);      
-  lv_obj_set_style_bg_color(obj,lv_palette_darken(LV_PALETTE_INDIGO,4), LV_PART_MAIN);      
-
-  obj = lv_label_create(obj);
-  lv_obj_align(obj, LV_ALIGN_CENTER, 0, 0);
-  lv_label_set_text(obj, "More");
-
-  Screen2Info = lv_label_create(nav);
-  lv_obj_align(Screen2Info, LV_ALIGN_CENTER, 0, 0);
-  lv_obj_set_style_text_font(Screen2Info, &lv_font_montserrat_32, LV_PART_MAIN| LV_STATE_DEFAULT);  
-  lv_label_set_text(Screen2Info, "INFO");
-
-  lv_obj_update_layout(nav);
-  int nav_height = lv_obj_get_height(nav);
-
-  lv_obj_t * cont = lv_obj_create(screen2);
-  lv_obj_remove_style_all(cont);
-  lv_obj_set_size(cont, lv_pct(100), lv_pct(100));
-  lv_obj_align(cont, LV_ALIGN_TOP_MID, 0, 0);
-  lv_obj_set_style_margin_bottom(cont, nav_height, LV_PART_MAIN);
+  lv_obj_t * cont = GetContentObject(screen2);
 
   static int32_t col_dsc2[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
   static int32_t row_dsc2[] = {LV_GRID_FR(2), LV_GRID_FR(6), LV_GRID_TEMPLATE_LAST};
@@ -113,7 +73,6 @@ void Screen2Create(lv_event_cb_t event_cb_more)
   Screen2VoltageDisplay = create_display(cell, lv_palette_main(LV_PALETTE_RED), true);
   lv_obj_add_style(Screen2VoltageDisplay, &style2, 0);  
   lv_obj_align(Screen2VoltageDisplay, LV_ALIGN_CENTER, 0, 0);
-  lv_obj_add_flag(Screen2VoltageDisplay, LV_OBJ_FLAG_USER_1);
 
   cell = lv_obj_create(grid);
   lv_obj_remove_style_all(cell);
@@ -122,7 +81,6 @@ void Screen2Create(lv_event_cb_t event_cb_more)
   Screen2CurrentDisplay = create_display(cell, lv_palette_main(LV_PALETTE_GREEN), true);
   lv_obj_add_style(Screen2CurrentDisplay, &style2, 0);  
   lv_obj_align(Screen2CurrentDisplay, LV_ALIGN_CENTER, 0, 0);
-  lv_obj_add_flag(Screen2CurrentDisplay, LV_OBJ_FLAG_USER_2);
  
   cell = lv_obj_create(grid);
   lv_obj_remove_style_all(cell);
@@ -162,7 +120,7 @@ void Screen2Create(lv_event_cb_t event_cb_more)
 
   obj = lv_label_create(cell);
   lv_obj_align_to(obj, scale_y, LV_ALIGN_OUT_RIGHT_TOP, 5, 0);
-  lv_obj_set_style_text_font(Screen2Info, &lv_font_montserrat_18, LV_PART_MAIN| LV_STATE_DEFAULT);  
+  lv_obj_set_style_text_font(obj, &lv_font_montserrat_18, LV_PART_MAIN| LV_STATE_DEFAULT);  
   lv_label_set_text(obj, "Volt / Amps");
 }
 
@@ -249,7 +207,8 @@ void Screen2SetActive(byte BN)
       if (Screen2VoltageDisplay != NULL) SetDisplaymV(Screen2VoltageDisplay, 0);          
       if (Screen2CurrentDisplay != NULL) SetDisplaymV(Screen2CurrentDisplay, 0);
 
-      lv_label_set_text_fmt(Screen2Info,"Battery #%d",SelectedBattery);
+      lv_obj_t * info = GetInfoObject(screen2);
+      lv_label_set_text_fmt(info,"Battery #%d",SelectedBattery);
 
       if (voltage_series != NULL) lv_chart_set_all_value(chart, voltage_series, LV_CHART_POINT_NONE);
       if (current_series != NULL) lv_chart_set_all_value(chart, current_series, LV_CHART_POINT_NONE);
