@@ -1,0 +1,175 @@
+#include <Arduino.h>
+#include <lvgl.h>
+#include "sevensegment.h"
+#include "Screenbase.h"
+
+#define DATASIZE 2000
+#define CHARTSIZE 255
+
+extern const lv_font_t lv_font_montserrat_18;
+extern const lv_font_t lv_font_montserrat_32;
+
+typedef struct
+{
+  unsigned long T;
+  unsigned long H;
+} __attribute__ ((packed)) SensorData;
+
+typedef struct
+{
+  SensorData *SensorDatas;
+  int16_t Tail;
+  int16_t Head;
+} SensorAllData;
+
+SensorAllData Datas;
+
+lv_obj_t * screen2 = NULL;
+static lv_obj_t * Screen2TemperatureDisplay = NULL;
+static lv_obj_t * Screen2HumidityDisplay = NULL;
+static lv_obj_t * chart = NULL;
+static lv_chart_series_t * temperature_series = NULL;
+static lv_chart_series_t * humidity_series = NULL;
+
+void Screen2InitData(void)
+{
+  Datas.SensorDatas = (SensorData*)malloc(DATASIZE * sizeof(SensorData));
+  memset(Datas.SensorDatas, 0, DATASIZE * sizeof(SensorData));
+  Datas.Tail = -1;
+  Datas.Head = -1;
+}
+
+void Screen2EmptyData(void)
+{
+  memset(Datas.SensorDatas, 0, DATASIZE * sizeof(SensorData));
+  Datas.Tail = -1;
+  Datas.Head = -1;
+}
+
+void Screen2AddData(unsigned long T, unsigned long H)
+{
+  static bool GoAround = false;
+
+  SensorAllData * BAD  = &Datas;
+
+  // Reset GoAround in needed
+  if ((BAD->Head == -1) && (BAD->Tail == -1)) GoAround = false;
+
+  if (GoAround)
+  {
+    BAD->Tail++;
+    if (BAD->Tail >= DATASIZE) BAD->Tail = 0;
+  }
+
+  BAD->Head++;
+  if (BAD->Head >= DATASIZE)
+  {
+    BAD->Head = 0;
+    if (!GoAround) BAD->Tail = 1; // Preset tail to last added value
+    GoAround = true;
+  }
+
+  SensorData * BD = &BAD->SensorDatas[BAD->Head];
+
+  BD->T = T;
+  BD->H = H;
+
+  if (Screen2TemperatureDisplay != NULL) SetDisplaymV(Screen2TemperatureDisplay, T);
+  if (temperature_series != NULL) lv_chart_set_next_value(chart, temperature_series, T);
+
+  if (Screen2HumidityDisplay != NULL)  SetDisplaymV(Screen2HumidityDisplay, H);
+  if (humidity_series != NULL) lv_chart_set_next_value(chart, humidity_series, H);
+}
+
+void Screen2Create(lv_event_cb_t event_cb_more)
+{
+  lv_obj_t * obj = NULL;
+
+  screen2 = lv_obj_create(NULL);
+  BaseScreenSetup(screen2, event_cb_more);
+
+  lv_obj_t * cont = GetContentObject(screen2);
+
+  static int32_t col_dsc2[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
+  static int32_t row_dsc2[] = {LV_GRID_FR(2), LV_GRID_FR(6), LV_GRID_TEMPLATE_LAST};
+
+  lv_obj_t * grid = lv_obj_create(cont);
+  lv_obj_set_size(grid, lv_pct(100), lv_pct(100));
+  lv_obj_set_style_pad_all(grid, 0, LV_PART_MAIN);
+
+  lv_obj_set_style_pad_row(grid, 0, 0);
+  lv_obj_set_style_pad_column(grid, 0, 0);
+  lv_obj_set_grid_dsc_array(grid, col_dsc2, row_dsc2);
+  lv_obj_center(grid);
+
+  // Style for 7 segment panel
+  static lv_style_t style2;
+  lv_style_init(&style2);
+  // Set a background color and a radius
+  lv_style_set_bg_opa(&style2, LV_OPA_COVER);
+  lv_style_set_bg_color(&style2, lv_palette_lighten(LV_PALETTE_GREY, 1));
+  // Add a shadow
+  lv_style_set_shadow_width(&style2, 30);
+  lv_style_set_shadow_color(&style2, lv_palette_main(LV_PALETTE_BLUE));
+
+  lv_obj_t * cell = NULL;
+
+  cell = lv_obj_create(grid);
+  lv_obj_remove_style_all(cell);
+  lv_obj_set_grid_cell(cell, LV_GRID_ALIGN_STRETCH, 0, 1, LV_GRID_ALIGN_STRETCH, 0, 1);
+
+  Screen2TemperatureDisplay = create_display(cell, lv_palette_main(LV_PALETTE_RED), true);
+  lv_obj_add_style(Screen2TemperatureDisplay, &style2, 0);  
+  lv_obj_align(Screen2TemperatureDisplay, LV_ALIGN_CENTER, 0, 0);
+
+  cell = lv_obj_create(grid);
+  lv_obj_remove_style_all(cell);
+  lv_obj_set_grid_cell(cell, LV_GRID_ALIGN_STRETCH, 1, 1, LV_GRID_ALIGN_STRETCH, 0, 1);
+
+  Screen2HumidityDisplay = create_display(cell, lv_palette_main(LV_PALETTE_GREEN), true);
+  lv_obj_add_style(Screen2HumidityDisplay, &style2, 0);  
+  lv_obj_align(Screen2HumidityDisplay, LV_ALIGN_CENTER, 0, 0);
+ 
+  cell = lv_obj_create(grid);
+  lv_obj_remove_style_all(cell);
+  lv_obj_set_grid_cell(cell, LV_GRID_ALIGN_STRETCH, 0, 2, LV_GRID_ALIGN_STRETCH, 1, 1);
+
+  lv_obj_t * scale_y = lv_scale_create(cell);
+  lv_obj_set_size(scale_y, lv_pct(8), lv_pct(96));
+
+  chart = lv_chart_create(cell);
+  lv_obj_set_size(chart, lv_pct(92), lv_pct(96));
+
+  // Set scale
+  lv_scale_set_mode(scale_y, LV_SCALE_MODE_VERTICAL_LEFT);
+  lv_obj_align(scale_y, LV_ALIGN_LEFT_MID, 0, 0);    
+  lv_scale_set_total_tick_count(scale_y, 21);
+  lv_scale_set_major_tick_every(scale_y, 5);
+
+  static const char * scale[] = {"0", "25", "50", "75", "100", NULL};
+  lv_scale_set_text_src(scale_y, scale);
+
+  // Set chart
+  lv_obj_align(chart, LV_ALIGN_RIGHT_MID, 0, 0);
+  lv_chart_set_type(chart, LV_CHART_TYPE_LINE);   //Show lines and points too
+
+  lv_obj_set_style_pad_all(chart, 0, 0);
+  lv_obj_set_style_radius(chart, 0, 0);
+  lv_chart_set_div_line_count(chart, 5, 0);
+
+  lv_chart_set_update_mode(chart, LV_CHART_UPDATE_MODE_SHIFT);
+  lv_chart_set_range(chart, LV_CHART_AXIS_PRIMARY_Y, 0, 100000);    
+  lv_chart_set_point_count(chart, CHARTSIZE);  
+
+  temperature_series = lv_chart_add_series(chart, lv_palette_main(LV_PALETTE_RED), LV_CHART_AXIS_PRIMARY_Y);
+  humidity_series = lv_chart_add_series(chart, lv_palette_main(LV_PALETTE_GREEN), LV_CHART_AXIS_PRIMARY_Y);  
+
+  lv_obj_set_style_pad_ver(scale_y, lv_chart_get_first_point_center_offset(chart), 0);
+
+  obj = lv_label_create(cell);
+  lv_obj_align_to(obj, scale_y, LV_ALIGN_OUT_RIGHT_TOP, 5, 0);
+  lv_obj_set_style_text_font(obj, &lv_font_montserrat_18, LV_PART_MAIN| LV_STATE_DEFAULT);  
+  lv_label_set_text(obj, "Temp / Hum");
+
+  Screen2InitData();
+}
