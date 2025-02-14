@@ -5,6 +5,7 @@
 // This define is sometimes missing when using old ESP32-IDF version
 //#define ESP_INTR_CPU_AFFINITY_AUTO 0
 
+#include <Arduino.h>
 #include <lvgl.h>
 #include <Arduino_GFX_Library.h>
 #include <PacketSerial.h>
@@ -17,15 +18,17 @@
 #define HOR_RES 480
 #define VER_RES 480
 
-#define RXD2 20
-#define TXD2 19
+#define PACKET_UART_RXD 20
+#define PACKET_UART_TXD 19
+
+#define BUTTON_PIN 38
 
 #define GFX_DEV_DEVICE ESP32_S3_RGB
 #define RGB_PANEL
 #define GFX_BL 45
 Arduino_DataBus *bus = new Indicator_SWSPI(
-    GFX_NOT_DEFINED /* DC */, PCA95x5::Port::P04 /* CS */,
-    41 /* SCK */, 48 /* MOSI */, GFX_NOT_DEFINED /* MISO */);
+    GFX_NOT_DEFINED /* DC */, EXPANDER_IO_LCD_CS /* CS */,
+    SPI_SCLK /* SCK */, SPI_MOSI /* MOSI */, GFX_NOT_DEFINED /* MISO */);
 
 Arduino_ESP32RGBPanel *rgbpanel = new Arduino_ESP32RGBPanel(
     18 /* DE */, 17 /* VSYNC */, 16 /* HSYNC */, 21 /* PCLK */,
@@ -38,7 +41,10 @@ Arduino_RGB_Display *gfx = new Arduino_RGB_Display(
     HOR_RES /* width */, VER_RES /* height */, rgbpanel, 0 /* rotation */, false /* auto_flush */,
     bus, GFX_NOT_DEFINED /* RST */, st7701_indicator_init_operations, sizeof(st7701_indicator_init_operations));
 
+TBatteryBoard BatteryBoards[DAUGHTERBOARDCOUNT] = {0};
+
 COBSPacketSerial myPacketSerial;
+//PacketSerial_<COBS, 0, 1024> myPacketSerial;
 
 void onPacketReceived(const uint8_t* buffer, size_t size);
 
@@ -101,15 +107,29 @@ static void event_handler(lv_event_t * e)
           Serial.println("Screen 1");
           Screen2SetActive(btn_no);
           lv_screen_load(screen2);
-          //Screen2SetActive(btn_no);
+          //Screen2SetActive(5);
         }
-        if (screen == screen2) {
+        if (screen == screen2)
+        {
           Serial.println("Screen 2");
-            if (btn_no == 0) {lv_screen_load(screen1);} else {lv_screen_load(screen3);}
+          if (btn_no == 0)
+          {
+            lv_screen_load(screen1);
+          }
+          else
+          {
+            Create_Screen3(event_handler);
+            lv_screen_load(screen3);
+          }
         }
-        if (screen == screen3) {
+        if (screen == screen3)
+        {
           Serial.println("Screen 3");
-            if (btn_no == 0) {lv_screen_load(screen2);}
+          if (btn_no == 0)
+          {
+            lv_screen_load(screen2);
+            lv_obj_delete(screen3);
+          }
         }
       }
     }
@@ -125,11 +145,13 @@ void setup()
   String LVGL_Arduino = String('V') + lv_version_major() + "." + lv_version_minor() + "." + lv_version_patch();
   Serial.println(LVGL_Arduino);
 
+  pinMode(BUTTON_PIN, INPUT);
+
   // Init Indicator hardware
   extender_init();
 
   myPacketSerial.begin(115200);
-  Serial1.begin(115200, SERIAL_8N1, RXD2, TXD2);
+  Serial1.begin(115200, SERIAL_8N1, PACKET_UART_RXD, PACKET_UART_TXD);
   myPacketSerial.setStream(&Serial1);
   myPacketSerial.setPacketHandler(&onPacketReceived);
 
@@ -167,12 +189,11 @@ void setup()
   lv_indev_set_read_cb(indev, my_touchpad_read);
 
   Create_Screen1(event_handler);
+
   Screen2Create(event_handler);
-  Create_Screen3(event_handler);
+  Screen2InitData();  
 
   lv_screen_load(screen1);
-
-  Screen2InitData();  
 
   Serial.println("Setup done");
 }
@@ -180,6 +201,18 @@ void setup()
 void loop()
 {
   static TickType_t xLastWakeTime = xTaskGetTickCount();
+  
+  /*
+  unsigned long startTime = millis();
+  while (digitalRead(BUTTON_PIN) == LOW)
+  {
+    if (millis() - startTime >= 10000)
+    {
+      ESP.restart();
+      //esp_restart();
+    }
+  }
+  */
 
   myPacketSerial.update();
   // Check for a receive buffer overflow (optional).
@@ -201,60 +234,81 @@ void loop()
 
 void onPacketReceived(const uint8_t* buffer, size_t size)
 {
+#ifndef YOLO
+  Serial.printf("<--- recv len:%d, data: ", size);
+  for (int i = 0; i < size; i++) {
+    Serial.printf("0x%x ", buffer[i]);
+  }
+  Serial.println("");
+#endif
+
+
   if (size < 1) {
     return;
   }
 
-  lv_color_t c = LV_COLOR_MAKE(0,0,0);  
+  byte index = 0;
 
-  dword tempcalc;
+  TCommands Command = (TCommands)buffer[index++];
 
-  byte BatteryNumber = 0;
-  word Volt = 0;
-  word Amps = 0; 
-  TBatteryStatus Status = BSOff; 
-
-  BatteryNumber = buffer[0];
-  memcpy(&Volt, &buffer[1], 2);
-  memcpy(&Amps, &buffer[3], 2);
-
-  Screen2AddData((BatteryNumber+1),Volt,Amps);
-
-  // Put data on screen 1
-  tempcalc = Volt * 3300u;
-  tempcalc /= (dword)((1u << BITS)-1u);
-  SetVoltageScreen1mV(BatteryNumber,(word)tempcalc);
-
-  tempcalc = Amps * 6000u;
-  tempcalc /= (dword)((1u << BITS)-1u);
-  SetCurrentScreen1mA(BatteryNumber,(word)tempcalc);
-
-  Status = (TBatteryStatus)buffer[5];
-  switch (Status)
+  if ((Command == CMD_get_data) || (Command == CMD_set_value))
   {
-    case BSCurrent:
-    case BSPower:
-    case BSResistor:
+    byte BatteryNumber = buffer[index++];
+
+    if (Command == CMD_get_data)
     {
-      c = lv_palette_main(LV_PALETTE_DEEP_ORANGE);
-      break;
+      dword tempcalc;
+      word Volt = 0;
+      word Amps = 0; 
+
+      memcpy(&Volt, &buffer[index], 2);
+      index += 2;
+      memcpy(&Amps, &buffer[index], 2);
+      index += 2;
+
+      Screen2AddData((BatteryNumber+1),Volt,Amps);
+
+      // Put data on screen 1
+      tempcalc = Volt * 3300u;
+      tempcalc /= (dword)((1u << BITS)-1u);
+      SetVoltageScreen1mV(BatteryNumber,(word)tempcalc);
+
+      tempcalc = Amps * 6000u;
+      tempcalc /= (dword)((1u << BITS)-1u);
+      SetCurrentScreen1mA(BatteryNumber,(word)tempcalc);
     }
-    case BSCharge:
-    case BSVoltage:
-    case BSPulse:
+
+    if (Command == CMD_set_value)
     {
-      c = lv_palette_main(LV_PALETTE_PURPLE);
-      break;
-    }  
-    case BSOff:
-    {
-      c = LV_COLOR_MAKE(0,0xFF,0xFF);
-      break;
-    }
-    default:
-    {
-      c = lv_palette_main(LV_PALETTE_YELLOW);
+      lv_color_t c = LV_COLOR_MAKE(0,0,0);  
+      TBatteryStatus Status = (TBatteryStatus)buffer[index++];
+      switch (Status)
+      {
+        case BSCurrent:
+        case BSPower:
+        case BSResistor:
+        {
+          c = lv_palette_main(LV_PALETTE_DEEP_ORANGE);
+          break;
+        }
+        case BSCharge:
+        case BSVoltage:
+        case BSPulse:
+        {
+          c = lv_palette_main(LV_PALETTE_PURPLE);
+          break;
+        }  
+        case BSOff:
+        {
+          c = LV_COLOR_MAKE(0X00,0xFF,0xFF);
+          break;
+        }
+        default:
+        {
+          c = lv_palette_main(LV_PALETTE_YELLOW);
+        }
+      }
+      SetLedScreen1(BatteryNumber,c);
     }
   }
-  SetLedScreen1(BatteryNumber,c);
 }

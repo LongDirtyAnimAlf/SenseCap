@@ -16,7 +16,7 @@ int16_t touch_max_x = 0, touch_max_y = 0;
 int16_t touch_raw_x = 0, touch_raw_y = 0;
 int16_t touch_last_x = 0, touch_last_y = 0;
 
-TouchLib touch(Wire, LCD_SDA, LCD_SCL, TOUCH_MODULE_ADDR);
+TouchLib touch(Wire, EXTENDER_SDA, EXTENDER_SCL, TOUCH_MODULE_ADDR);
 
 void touch_init(int16_t w, int16_t h, uint8_t r)
 {

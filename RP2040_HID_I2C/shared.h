@@ -63,13 +63,11 @@ typedef struct
   dword E;
   word T;
   TBatteryStatus Status;
-  dword StatusValue;
-  bool NeedsGUIUpdate;
-  byte DatSendError;
-  byte BytesReceived;
-  bool CRCError;
-  bool Blocked;
-  byte Address;
+  dword SetValue;
+  byte I2CBytesReceived;
+  byte I2CSendError;
+  bool I2CCRCError;
+  bool I2CBlocked;
 } TBatteryData,*PBatteryData;
 
 typedef union
@@ -88,3 +86,14 @@ typedef struct {
   byte BoardSerial[12];
   byte BoardNumber;
 } TBoardInfo;
+
+typedef struct
+{
+  byte Serial[8];
+  TBatteryData Data;
+  word Vmax;
+  word Imax;
+  word Firmware;
+  bool NeedsGUIUpdate;
+  bool NeedsDataUpdate;
+} TBatteryBoard,*PBatteryBoard;

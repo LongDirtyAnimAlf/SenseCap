@@ -89,7 +89,7 @@ void Create_Screen3(lv_event_cb_t event_cb_more)
   lv_obj_set_style_text_font(label, &lv_font_montserrat_32, LV_PART_MAIN| LV_STATE_DEFAULT);  
   lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
   lv_label_set_text(label, "START DISCHARGE");
- 
+
   label = lv_label_create(cont);
   lv_obj_set_style_text_font(label, &lv_font_montserrat_32, LV_PART_MAIN| LV_STATE_DEFAULT);  
   lv_label_set_text(label, "Under construction !!");
