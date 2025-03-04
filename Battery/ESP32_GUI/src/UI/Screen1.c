@@ -1,14 +1,15 @@
 #include <lvgl.h>
 #include "shared.h"
+#include "sevensegment.h"
 
 lv_obj_t * screen1;
 
-static lv_obj_t * Screen1Display[DAUGHTERBOARDCOUNT];
-static lv_obj_t * Screen1Led[DAUGHTERBOARDCOUNT];
-static lv_obj_t *unit_label[DAUGHTERBOARDCOUNT];
+static lv_obj_t * Screen1Display[MAXDAUGHTERBOARDCOUNT] = {NULL};
+static lv_obj_t * Screen1Led[MAXDAUGHTERBOARDCOUNT] = {NULL};
+static lv_obj_t *unit_label[MAXDAUGHTERBOARDCOUNT] = {NULL};
 
-static word VoltagemV[DAUGHTERBOARDCOUNT];
-static word CurrentmA[DAUGHTERBOARDCOUNT];
+static word VoltagemV[MAXDAUGHTERBOARDCOUNT] = {0};
+static word CurrentmA[MAXDAUGHTERBOARDCOUNT] = {0};
 
 static bool VI = true;
 
@@ -31,10 +32,14 @@ static void display_event_handler(lv_event_t * e)
       int i = 0;
       word data;  
 
-      for(i = 0; i < DAUGHTERBOARDCOUNT; i++)
+      for(i = 0; i < MAXDAUGHTERBOARDCOUNT; i++)
       {
-        if (VI) data = VoltagemV[i]; else data = CurrentmA[i];
-        SetDisplaymV(Screen1Display[i], data);
+
+        if (i < DAUGHTERBOARDCOUNT)
+        {
+          if (VI) data = VoltagemV[i]; else data = CurrentmA[i];
+          SetDisplaymV(Screen1Display[i], data);
+        }
 
         if (VI)
         {
@@ -114,10 +119,10 @@ void Create_Screen1(lv_event_cb_t event_cb_more)
   lv_obj_set_grid_dsc_array(grid, col_dsc, row_dsc);
 
   int i = 0;
-  for(i = 0; i < DAUGHTERBOARDCOUNT; i++)
+  for(i = 0; i < MAXDAUGHTERBOARDCOUNT; i++)
   {
-    int row = i % (DAUGHTERBOARDCOUNT / 2);
-    int col = i / (DAUGHTERBOARDCOUNT / 2);
+    int row = i % (MAXDAUGHTERBOARDCOUNT / 2);
+    int col = i / (MAXDAUGHTERBOARDCOUNT / 2);
 
     lv_obj_t * cell = lv_obj_create(grid);
 
@@ -143,7 +148,21 @@ void Create_Screen1(lv_event_cb_t event_cb_more)
       lv_led_set_color(Screen1Led[i], lv_palette_main(LV_PALETTE_BLUE));
       //lv_led_set_color(Screen1Led[i], LV_COLOR_MAKE(0,0xFF,0xFF));
 
-      Screen1Display[i] = create_display(cell, lv_palette_main(LV_PALETTE_RED), false);
+      obj = lv_label_create(Screen1Led[i]);
+      lv_obj_align(obj, LV_ALIGN_CENTER, 0, 0);
+      lv_obj_set_style_text_opa(obj, 255, LV_PART_MAIN| LV_STATE_DEFAULT);
+      lv_obj_set_style_text_font(obj, &lv_font_montserrat_12, LV_PART_MAIN| LV_STATE_DEFAULT);
+      lv_obj_set_style_text_color(obj, lv_color_black(), LV_PART_MAIN | LV_STATE_DEFAULT );	
+      if (i<DAUGHTERBOARDCOUNT)
+      {
+        lv_label_set_text_fmt(obj, "%d", (i+1));
+      }
+      else
+      {
+        lv_label_set_text(obj, "-");
+      }
+
+      Screen1Display[i] = create_display(cell, lv_palette_main(LV_PALETTE_RED), false, 5);
 
       unit_label[i] = lv_label_create(cell);
       lv_obj_set_style_text_opa(unit_label[i], 255, LV_PART_MAIN| LV_STATE_DEFAULT);
@@ -155,16 +174,31 @@ void Create_Screen1(lv_event_cb_t event_cb_more)
 
       lv_obj_t *cell_button = lv_btn_create(cell);
       lv_obj_set_size(cell_button, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-      lv_obj_add_event_cb(cell_button, event_cb_more, LV_EVENT_CLICKED, (void *)(i+1));   
       lv_obj_set_style_translate_x(cell_button, -4, LV_PART_MAIN| LV_STATE_DEFAULT);          
       lv_obj_set_style_pad_top(cell_button, 8, LV_PART_MAIN);
       lv_obj_set_style_pad_bottom(cell_button, 8, LV_PART_MAIN);
       lv_obj_set_style_pad_left(cell_button, 6, LV_PART_MAIN);
       lv_obj_set_style_pad_right(cell_button, 6, LV_PART_MAIN);
       lv_obj_set_style_bg_color(cell_button,lv_palette_darken(LV_PALETTE_INDIGO,4), LV_PART_MAIN);
+      if (i<DAUGHTERBOARDCOUNT)
+      {
+        // Add event with userdata to indicate which battery button was used
+        lv_obj_add_event_cb(cell_button, event_cb_more, LV_EVENT_CLICKED, (void *)(i+1));   
+      }
+      else
+      {
+        lv_obj_add_state(cell_button,LV_STATE_DISABLED);
+      }
 
       lv_obj_t * label = lv_label_create(cell_button);
-      lv_label_set_text(label, "More");
+      if (i<DAUGHTERBOARDCOUNT)
+      {
+        lv_label_set_text(label, "More");
+      }
+      else
+      {
+        lv_label_set_text(label, "------");
+      }
       lv_obj_center(label);
     }
   }  
@@ -172,26 +206,41 @@ void Create_Screen1(lv_event_cb_t event_cb_more)
 
 void SetVoltageScreen1mV(uint8_t Index, word data)
 {
-  VoltagemV[Index] = data;
-  if (Screen1Display[Index] != NULL)
+  if (screen1 == NULL) return;
+
+  if (Index<DAUGHTERBOARDCOUNT)
   {
-    if (VI) SetDisplaymV(Screen1Display[Index], data);
+    VoltagemV[Index] = data;
+    if (Screen1Display[Index] != NULL)
+    {
+      if (VI) SetDisplaymV(Screen1Display[Index], data);
+    }
   }
 }
 void SetCurrentScreen1mA(uint8_t Index, word data)
 {
-  CurrentmA[Index] = data;
-  if (Screen1Display[Index] != NULL)
+  if (screen1 == NULL) return;
+
+  if (Index<DAUGHTERBOARDCOUNT)
   {
-    if (!VI) SetDisplaymV(Screen1Display[Index], data);
+    CurrentmA[Index] = data;
+    if (Screen1Display[Index] != NULL)
+    {
+      if (!VI) SetDisplaymV(Screen1Display[Index], data);
+    }
   }
 }
 
 void SetLedScreen1(uint8_t Index, lv_color_t c)
 {
-  if (Screen1Led[Index] != NULL)
+  if (screen1 == NULL) return;
+
+  if (Index<DAUGHTERBOARDCOUNT)
   {
-    lv_led_set_color(Screen1Led[Index], c);  
+    if (Screen1Led[Index] != NULL)
+    {
+      lv_led_set_color(Screen1Led[Index], c);  
+    }
   }
 }
 

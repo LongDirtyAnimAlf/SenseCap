@@ -5,12 +5,20 @@
 extern const lv_font_t lv_font_dseg7_64;
 extern const lv_font_t lv_font_dseg7_32;
 
-lv_obj_t * create_display(lv_obj_t * parent, lv_color_t c, bool size)
+const char ZEROS[]    = "000000000000";
+const char ALL[]      = "888888888888";
+const char INVALID[]  = "------------";
+
+char tmpArray[12] = "";
+
+lv_obj_t * create_display(lv_obj_t * parent, lv_color_t c, bool size, byte count)
 {
+  byte i;
 
   lv_font_t * digitfont;
 
   lv_obj_t *digits = lv_obj_create(parent);
+  lv_obj_set_user_data(digits,(void *)count);  
 
   if (size)
   {
@@ -49,56 +57,79 @@ lv_obj_t * create_display(lv_obj_t * parent, lv_color_t c, bool size)
   lv_obj_set_style_text_color(digits_back, c, LV_PART_MAIN | LV_STATE_DEFAULT );
   lv_obj_set_style_text_font(digits_back, digitfont, LV_PART_MAIN| LV_STATE_DEFAULT);
   lv_obj_set_style_opa(digits_back, LV_OPA_20, 0);
-  lv_label_set_text(digits_back, "8.888");
+
+  strncpy(tmpArray,ALL,count);
+  tmpArray[1] = '.';
+  tmpArray[count] = 0;
+
+  lv_label_set_text(digits_back, tmpArray);
+  //lv_label_set_text(digits_back, "8.888");
 
   lv_obj_t *digits_front = lv_label_create(digits);
   lv_obj_remove_style_all(digits_front);
   lv_obj_align(digits_front, LV_ALIGN_LEFT_MID, 0, 0);
   lv_obj_set_style_text_color(digits_front, c, LV_PART_MAIN | LV_STATE_DEFAULT );
   lv_obj_set_style_text_font(digits_front, digitfont, LV_PART_MAIN| LV_STATE_DEFAULT);
-  lv_label_set_text(digits_front, "0.000");
+
+  strncpy(tmpArray,INVALID,count);
+  tmpArray[1] = '.';
+  tmpArray[count] = 0;
+
+  lv_label_set_text(digits_front, tmpArray);
+  //lv_label_set_text(digits_front, "-.---");
 
   return digits;
 }
 
-byte WordToTxtThousands(dword value, byte displaysize, char* destination)
+byte WordToTxtThousands(uint32_t value, byte displaysize, char* destination)
 {
-  byte dot = 1;
-  dword tmp = value;
-  byte runner;
-
-  while (tmp >= 10u)
-  {
-    if (tmp>=10000u) dot++; else break;
-    tmp /= 10u;
-  }
+  int8_t dot;
+  uint32_t tmp;
+  int8_t runner;
+  char * buffer;
+  uint8_t v;
 
   tmp = value;
-  if (dot>1)
+  dot = 1;
+
+  buffer = destination;
+
+  buffer[displaysize] = 0;
+
+  // Fill buffer with zero
+  uint8_t ndx = displaysize;
+  while (ndx)
   {
-    runner = (dot-1);
-    while (runner-- > 0) tmp /= 10u;
+    ndx--;
+    buffer[ndx]  = '0';
+    if (tmp>9999U) dot++;
+    tmp /= 10; 
   }
 
-  destination += (displaysize);
-  *destination-- = 0;
-  runner = (displaysize-1);
-  if (runner < (dot+1)) *destination-- = 0;
-  while (runner)
+  runner = dot + 3; // we process data in mV, mA, mW or mAh .. so 10-3
+
+  tmp = value;
+  while (true) 
   {
-    runner--;
-    *destination-- = (tmp  % 10u) + '0';    
-    if (dot == runner)
+    if (runner == dot)
     {
-      *destination-- = '.';
+      if (runner < (displaysize-1)) buffer[runner]  = '.';
+      if (runner == (displaysize-1)) buffer[runner]  = 0;
     }
-    tmp /= 10u;
+    else
+    {
+      v = tmp % 10;
+      tmp /= 10; 
+      if (runner < displaysize) buffer[runner]  = v + '0';
+    }
+    if (runner==0) break;
+    runner--;
   }
 
   return dot;
 }
 
-void SetDisplaymV(lv_obj_t * target, word value)
+void SetDisplaymV(lv_obj_t * target, unsigned long value)
 {
   if (target != NULL)
   {
@@ -107,14 +138,23 @@ void SetDisplaymV(lv_obj_t * target, word value)
 
     if ((digits_back != NULL) && (digits_front != NULL))  
     {
-      char tmpArray[12] = "0000000000";
-      byte dp = WordToTxtThousands(value,5,tmpArray);
+      byte digitcount = (byte)(uintptr_t)lv_obj_get_user_data(target);    
 
-      char ascArray[6] = "88888";
-      if (dp<4) ascArray[dp] = '.'; else ascArray[4] = '\0';
+      //char tmpArray[12] = "0000000000";
+      strncpy(tmpArray,ZEROS,(digitcount));
+      tmpArray[digitcount] = 0;
 
-      lv_label_set_text(digits_back, ascArray);          
+      byte dp = WordToTxtThousands(value,digitcount,tmpArray);
       lv_label_set_text(digits_front, tmpArray); 
+
+      //char ascArray[6] = "88888";
+      strncpy(tmpArray,ALL,(digitcount));
+      tmpArray[digitcount] = 0;      
+
+      if (dp<(digitcount-1)) tmpArray[dp] = '.'; else tmpArray[(digitcount-1)] = '\0';
+
+      //lv_label_set_text(digits_back, ascArray);          
+      lv_label_set_text(digits_back, tmpArray); 
 
     }
   }

@@ -5,11 +5,11 @@
 extern "C" {
 #endif
 
-
 #include <lvgl.h>
 
-extern lv_obj_t * screen3;
-void Create_Screen3(lv_event_cb_t event_cb_more);
+void Setup_Screen3(byte index);
+void Screen3SetData(PBatterySetting SET);
+void Screen3AddData(word V, word I, dword E, dword C);
 
 #ifdef __cplusplus
 } /*extern "C"*/

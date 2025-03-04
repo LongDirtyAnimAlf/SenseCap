@@ -6,26 +6,32 @@ Arduino_RGB_Display *gfxdisplay = NULL;
 
 #define BYTE_PER_PIXEL (LV_COLOR_FORMAT_GET_SIZE(LV_COLOR_FORMAT_RGB565)) /*will be 2 for RGB565 */
 
+#define LVGL_DRAW_BUF_LINES    50 // number of display lines in each draw buffer
+
 #define DIRECT_MODE // Uncomment to enable full frame buffer
 
 #ifdef DIRECT_MODE
 
+//#define DIRECT_GFX
+
 /* LVGL calls it when a rendered image needs to copied to the display*/
 void my_disp_flush_direct(lv_display_t * disp, const lv_area_t * area, uint8_t * px_map)
 {
+
+    #ifndef DIRECT_GFX
     int32_t disp_hres = lv_display_get_horizontal_resolution(disp);
     int32_t disp_vres = lv_display_get_vertical_resolution(disp);
     lv_color_format_t cf = lv_display_get_color_format(disp);
     uint32_t px_size = lv_color_format_get_size(cf);
 
-    /*Calculate the position of the rotated area*/
+    //Calculate the position of the rotated area
     lv_area_t rotated_area = *area;
     lv_display_rotate_area(disp, &rotated_area);
 
-    /*Calculate the source stride (bytes in a line) from the width of the area*/    
+    //Calculate the source stride (bytes in a line) from the width of the area
     uint32_t src_stride = lv_draw_buf_width_to_stride(disp_hres, cf);
 
-    /*Calculate the stride of the destination (rotated) area too*/
+    //Calculate the stride of the destination (rotated) area too
     int32_t fb_stride = lv_draw_buf_width_to_stride(disp_hres, cf);
 
     uint8_t * fb_start = (uint8_t *)gfxdisplay->getFramebuffer();
@@ -45,12 +51,13 @@ void my_disp_flush_direct(lv_display_t * disp, const lv_area_t * area, uint8_t *
     }
     else
     {
-      /*Calculate the properties of the source buffer*/
+      //Calculate the properties of the source buffer
       int32_t src_w = lv_area_get_width(area);
       int32_t src_h = lv_area_get_height(area);
       // Rotate
       lv_draw_sw_rotate(px_map, fb_start, src_w, src_h, src_stride, fb_stride, rotation, cf);
     }
+    #endif
     if (lv_display_flush_is_last(disp))
     {
       gfxdisplay->flush();
@@ -62,9 +69,14 @@ void lv_screen_init(void * gfx, word W, word H)
 {
   gfxdisplay = (Arduino_RGB_Display*) gfx;
 
+  #ifdef DIRECT_GFX  
+  static uint8_t * sbuf2_1 = (uint8_t *)gfxdisplay->getFramebuffer();
+  static uint8_t * sbuf2_2 = NULL;
+  #else
   static uint8_t * sbuf2_1 = (uint8_t *)heap_caps_aligned_alloc(4, W * H * BYTE_PER_PIXEL, MALLOC_CAP_SPIRAM);
   static uint8_t * sbuf2_2 = NULL;
   //sbuf2_2 = (uint8_t *)heap_caps_aligned_alloc(4, screenWidth * screenHeight * BYTE_PER_PIXEL, MALLOC_CAP_SPIRAM);
+  #endif
 
   disp = lv_display_create(W, H);
 
@@ -118,14 +130,16 @@ void lv_screen_init(void * gfx, word W, word H)
 {
   gfxdisplay = (Arduino_RGB_Display*) gfx;
 
-  static uint8_t * sbuf1_1 = (uint8_t *)heap_caps_aligned_alloc(4, W * 10 * BYTE_PER_PIXEL, MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL);
+  size_t draw_buffer_sz = (W * LVGL_DRAW_BUF_LINES * BYTE_PER_PIXEL);
+
+  //static uint8_t * sbuf1_1 = (uint8_t *)heap_caps_aligned_alloc(4, draw_buffer_sz, MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL);
+  static uint8_t * sbuf1_1 = (uint8_t *)heap_caps_malloc(draw_buffer_sz, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
   static uint8_t * sbuf1_2 = NULL;
-  //sbuf1_2 = (uint8_t *)heap_caps_aligned_alloc(4, W * 10 * BYTE_PER_PIXEL, MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL);
 
   disp = lv_display_create(W, H);
   lv_display_set_flush_cb(disp, my_disp_flush_simple);
   
-  lv_display_set_buffers(disp, sbuf1_1, sbuf1_2, W * 10 * BYTE_PER_PIXEL, LV_DISP_RENDER_MODE_PARTIAL);
+  lv_display_set_buffers(disp, sbuf1_1, sbuf1_2, draw_buffer_sz, LV_DISP_RENDER_MODE_PARTIAL);
   lv_display_set_color_format(disp, LV_COLOR_FORMAT_RGB565);
 }
 
